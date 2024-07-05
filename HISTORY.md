@@ -2,6 +2,16 @@ Changelog
 =========
 
 
+(unreleased)
+------------
+- Format improvement. [ajperry2]
+
+
+0.0.3 (2024-07-05)
+------------------
+- Release: version 0.0.3 🚀 [ajperry2]
+
+
 0.0.2 (2024-07-05)
 ------------------
 - Release: version 0.0.2 🚀 [ajperry2]
