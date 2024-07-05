@@ -3,11 +3,11 @@ import hashlib
 import json
 import logging
 import os
+import re
 import sys
 import time
-from typing import Optional
-import re
-from urllib.parse import urlsplit, urlencode
+from typing import Optional, Tuple
+from urllib.parse import urlencode, urlsplit
 
 import requests
 import urllib3
@@ -20,6 +20,7 @@ try:
 except ImportError:
     # for kubeflow pipelines v1
     from kfp.auth import TokenCredentialsBase
+
 from kfp import Client
 
 
@@ -43,7 +44,8 @@ class KFPClientManager:
         :param skip_tls_verify: if True, skip TLS verification
         :param dex_username: the Dex username
         :param dex_password: the Dex password
-        :param dex_auth_type: the auth type to use if Dex has multiple enabled, one of: ['ldap', 'local']
+        :param dex_auth_type: the auth type to use if Dex has multiple enabled,
+        one of: ['ldap', 'local']
         """
         self._api_url = api_url
         self._skip_tls_verify = skip_tls_verify
@@ -59,13 +61,14 @@ class KFPClientManager:
         # ensure `dex_default_auth_type` is valid
         if self._dex_auth_type not in ["ldap", "local"]:
             raise ValueError(
-                f"Invalid `dex_auth_type` '{self._dex_auth_type}', must be one of: ['ldap', 'local']"
+                f"Invalid `dex_auth_type` '{self._dex_auth_type}'"
+                + ", must be one of: ['ldap', 'local']"
             )
 
     def _get_session_cookies(self) -> str:
         """
         Get the session cookies by authenticating against Dex
-        :return: a string of session cookies in the form "key1=value1; key2=value2"
+        :return: a string of session cookies in the form "key1=value1"
         """
 
         # use a persistent session (for cookies)
@@ -73,23 +76,29 @@ class KFPClientManager:
 
         # GET the api_url, which should redirect to Dex
         resp = s.get(
-            self._api_url, allow_redirects=True, verify=not self._skip_tls_verify
+            self._api_url,
+            allow_redirects=True,
+            verify=not self._skip_tls_verify,
         )
         if resp.status_code == 200:
             pass
         elif resp.status_code == 403:
             # if we get 403, we might be at the oauth2-proxy sign-in page
-            # the default path to start the sign-in flow is `/oauth2/start?rd=<url>`
+            # the default path to start the sign-in flow is
+            # `/oauth2/start?rd=<url>`
             url_obj = urlsplit(resp.url)
             url_obj = url_obj._replace(
                 path="/oauth2/start", query=urlencode({"rd": url_obj.path})
             )
             resp = s.get(
-                url_obj.geturl(), allow_redirects=True, verify=not self._skip_tls_verify
+                url_obj.geturl(),
+                allow_redirects=True,
+                verify=not self._skip_tls_verify,
             )
         else:
             raise RuntimeError(
-                f"HTTP status code '{resp.status_code}' for GET against: {self._api_url}"
+                f"HTTP status code '{resp.status_code}'"
+                + "for GET against: {self._api_url}"
             )
 
         # if we were NOT redirected, then the endpoint is unsecured
@@ -101,7 +110,9 @@ class KFPClientManager:
         url_obj = urlsplit(resp.url)
         if re.search(r"/auth$", url_obj.path):
             url_obj = url_obj._replace(
-                path=re.sub(r"/auth$", f"/auth/{self._dex_auth_type}", url_obj.path)
+                path=re.sub(
+                    r"/auth$", f"/auth/{self._dex_auth_type}", url_obj.path
+                )
             )
 
         # if we are at `/auth/xxxx/login` path, then we are at the login page
@@ -110,11 +121,14 @@ class KFPClientManager:
         else:
             # otherwise, we need to follow a redirect to the login page
             resp = s.get(
-                url_obj.geturl(), allow_redirects=True, verify=not self._skip_tls_verify
+                url_obj.geturl(),
+                allow_redirects=True,
+                verify=not self._skip_tls_verify,
             )
             if resp.status_code != 200:
                 raise RuntimeError(
-                    f"HTTP status code '{resp.status_code}' for GET against: {url_obj.geturl()}"
+                    f"HTTP status code '{resp.status_code}'"
+                    + "for GET against: {url_obj.geturl()}"
                 )
             dex_login_url = resp.url
 
@@ -127,10 +141,12 @@ class KFPClientManager:
         )
         if resp.status_code != 200:
             raise RuntimeError(
-                f"HTTP status code '{resp.status_code}' for POST against: {dex_login_url}"
+                f"HTTP status code '{resp.status_code}'"
+                + "for POST against: {dex_login_url}"
             )
 
-        # if we were NOT redirected, then the login credentials were probably invalid
+        # if we were NOT redirected, then
+        # the login credentials were probably invalid
         if len(resp.history) == 0:
             raise RuntimeError(
                 f"Login credentials are probably invalid - "
@@ -143,10 +159,11 @@ class KFPClientManager:
         try:
             session_cookies = self._get_session_cookies()
         except Exception as ex:
-            raise RuntimeError(f"Failed to get Dex session cookies") from ex
+            raise RuntimeError("Failed to get Dex session cookies") from ex
 
         # monkey patch the kfp.Client to support disabling SSL verification
-        # kfp only added support in v2: https://github.com/kubeflow/pipelines/pull/7174
+        # kfp only added support in v2:
+        # https://github.com/kubeflow/pipelines/pull/7174
         original_load_config = Client._load_config
 
         def patched_load_config(client_self, *args, **kwargs):
@@ -169,30 +186,36 @@ class KFPClientManager:
 
 class DeployKFCredentialsOutOfBand(TokenCredentialsBase):
     """
-    A Kubeflow Pipelines credential provider which uses an "out-of-band" OIDC login flow.
+    A Kubeflow Pipelines credential which uses an "out-of-band" login flow.
 
-    WARNING: intended for deployKF clusters only, unlikely to work with other Kubeflow clusters.
+    WARNING: intended for deployKF clusters only,
+    unlikely to work with other Kubeflow clusters.
 
     Key features:
-     - uses the OIDC client named 'kubeflow-pipelines-sdk', which is pre-configured in deployKF
-     - stores tokens in the user's home directory '~/.config/kfp/dkf_credentials.json'
-       (this file is indexed by issuer URL, so multiple clusters can be used concurrently)
-     - attempts to use the "refresh_token" grant before prompting the user to login again
-       (in deployKF, refresh tokens are valid if used at least once every 7 days, and not longer than 90 days in total)
+     - uses the OIDC client named 'kubeflow-pipelines-sdk'
+     - stores tokens in the user's home directory
+     - attempts to use the "refresh_token"
+       grant before prompting the user to login again
     """
 
     def __init__(self, issuer_url: str, skip_tls_verify: bool = False):
         """
         Initialize a DeployKFTokenCredentials instance.
 
-        :param issuer_url: the OIDC issuer URL (e.g. 'https://deploykf.example.com:8443/dex')
+        :param issuer_url: the OIDC issuer URL
         :param skip_tls_verify: if True, skip TLS verification
         """
         # oidc configuration
         self.oidc_issuer_url = issuer_url
         self.oidc_client_id = "kubeflow-pipelines-sdk"
         self.oidc_redirect_uri = "urn:ietf:wg:oauth:2.0:oob"
-        self.oidc_scope = ["openid", "email", "groups", "profile", "offline_access"]
+        self.oidc_scope = [
+            "openid",
+            "email",
+            "groups",
+            "profile",
+            "offline_access",
+        ]
 
         # other configuration
         self.http_timeout = 15
@@ -234,8 +257,12 @@ class DeployKFCredentialsOutOfBand(TokenCredentialsBase):
         Discover the OIDC issuer configuration.
         https://openid.net/specs/openid-connect-discovery-1_0.html
         """
-        oidc_discovery_url = f"{self.oidc_issuer_url}/.well-known/openid-configuration"
-        self.log.info("Discovering OIDC configuration from: %s", oidc_discovery_url)
+        oidc_discovery_url = (
+            f"{self.oidc_issuer_url}/.well-known/openid-configuration"
+        )
+        self.log.info(
+            "Discovering OIDC configuration from: %s", oidc_discovery_url
+        )
         response = requests.get(
             url=oidc_discovery_url,
             timeout=self.http_timeout,
@@ -252,7 +279,8 @@ class DeployKFCredentialsOutOfBand(TokenCredentialsBase):
         Read credentials from the JSON file for the current issuer.
         """
         self.log.debug(
-            "Checking for existing credentials in: %s", self.local_credentials_path
+            "Checking for existing credentials in: %s",
+            self.local_credentials_path,
         )
         if os.path.exists(self.local_credentials_path):
             with open(self.local_credentials_path, "r") as file:
@@ -262,7 +290,7 @@ class DeployKFCredentialsOutOfBand(TokenCredentialsBase):
 
     def _write_credentials(self, token: str):
         """
-        Write the provided token to the local credentials file (under the current issuer).
+        Write the provided token to the local credentials file
         """
         # Create the directory, if it doesn't exist
         credential_dir = os.path.dirname(self.local_credentials_path)
@@ -271,23 +299,23 @@ class DeployKFCredentialsOutOfBand(TokenCredentialsBase):
 
         # Read all existing credentials from the JSON file
         credentials_data = {}
-        if os.path.exists(self.local_credentials_path):
-            with open(self.local_credentials_path, "r") as f:
-                data = json.load(f)
-
         # Update the credentials for the given issuer
         credentials_data[self.oidc_issuer] = token
-        self.log.info("Writing credentials to: %s", self.local_credentials_path)
+        self.log.info(
+            "Writing credentials to: %s", self.local_credentials_path
+        )
         with open(self.local_credentials_path, "w") as f:
             json.dump(credentials_data, f)
 
-    def _generate_pkce_verifier(self) -> (str, str):
+    def _generate_pkce_verifier(self) -> Tuple[str, str]:
         """
         Generate a PKCE code verifier and its derived challenge.
         https://tools.ietf.org/html/rfc7636#section-4.1
         """
         # Generate a code_verifier of length between 43 and 128 characters
-        code_verifier = base64.urlsafe_b64encode(os.urandom(96)).decode("utf-8")
+        code_verifier = base64.urlsafe_b64encode(os.urandom(96)).decode(
+            "utf-8"
+        )
         code_verifier = code_verifier.rstrip("=")
         code_verifier = code_verifier[:128]
 
@@ -320,6 +348,7 @@ class DeployKFCredentialsOutOfBand(TokenCredentialsBase):
             return new_token
         except Exception as ex:
             self.log.error("Failed to refresh token!", exc_info=ex)
+        return None
 
     def _login(self, oauth_session: OAuth2Session) -> dict:
         """
@@ -340,7 +369,8 @@ class DeployKFCredentialsOutOfBand(TokenCredentialsBase):
 
         # Get the authorization code from the user
         print(
-            f"\nPlease open this URL in a browser to continue:\n > {authorization_url}\n",
+            "\nPlease open this URL in a browser"
+            + f"to continue:\n > {authorization_url}\n",
             flush=True,
         )
         user_input = input("Enter the authorization code:\n > ")
@@ -363,7 +393,7 @@ class DeployKFCredentialsOutOfBand(TokenCredentialsBase):
     def get_token(self) -> str:
         """
         Get the current auth token.
-        Will attempt to use "refresh_token" before prompting the user to login again.
+        Will attempt to use "refresh_token"
         """
         # return the existing token, if it's valid for at least 5 minutes
         stored_token = self._read_credentials()
@@ -372,7 +402,8 @@ class DeployKFCredentialsOutOfBand(TokenCredentialsBase):
             expires_in = expires_at - time.time()
             if expires_in > 300:
                 self.log.info(
-                    "Using cached auth token (expires in %d seconds)", expires_in
+                    "Using cached auth token (expires in %d seconds)",
+                    expires_in,
                 )
                 return stored_token["id_token"]
             elif expires_in > 0:

@@ -7,7 +7,9 @@ Be creative! do whatever you want!
 - Start a web application
 - Import things from your .base module
 """
+
 import os
+
 import kfp
 from dotenv import load_dotenv
 
@@ -62,12 +64,12 @@ def main():  # pragma: no cover
     assert "EXPERIMENT" in os.environ, "Name of Experiment required"
     assert "RUN" in os.environ, "Name of run required"
     experiment_name = os.environ["EXPERIMENT"]
-    run_name = os.environ['RUN']
+    run_name = os.environ["RUN"]
     # Make experiment if it does not exist
     try:
-        experiment = kfp_client.get_experiment(experiment_name=experiment_name)
-    except:
-        experiment = kfp_client.create_experiment(
+        kfp_client.get_experiment(experiment_name=experiment_name)
+    except RuntimeError:
+        kfp_client.create_experiment(
             name=experiment_name, namespace=deploykf_namespace
         )
     kfp_client.create_run_from_pipeline_func(
@@ -75,5 +77,5 @@ def main():  # pragma: no cover
         arguments={"recipient": "my_recip"},
         experiment_name=experiment_name,
         run_name=run_name,
-        namespace=deploykf_namespace
+        namespace=deploykf_namespace,
     )
