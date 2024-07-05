@@ -2,8 +2,9 @@ Changelog
 =========
 
 
-(unreleased)
-------------
+0.0.2 (2024-07-05)
+------------------
+- Release: version 0.0.2 🚀 [ajperry2]
 - Release: version 0.0.1 🚀 [ajperry2]
 
 
