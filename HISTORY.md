@@ -4,6 +4,12 @@ Changelog
 
 (unreleased)
 ------------
+- Adding types to requirements. [ajperry2]
+
+
+0.0.4 (2024-07-05)
+------------------
+- Release: version 0.0.4 🚀 [ajperry2]
 - Format improvement. [ajperry2]
 
 
