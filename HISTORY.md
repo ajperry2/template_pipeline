@@ -4,6 +4,13 @@ Changelog
 
 (unreleased)
 ------------
+- Removing release workflow and altering readme to be simpler.
+  [ajperry2]
+
+
+0.0.5 (2024-07-05)
+------------------
+- Release: version 0.0.5 🚀 [ajperry2]
 - Adding types to requirements. [ajperry2]
 
 
