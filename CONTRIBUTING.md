@@ -86,7 +86,6 @@ clean:            ## Clean unused files.
 virtualenv:       ## Create a virtual environment.
 release:          ## Create a new tag for release.
 docs:             ## Build the documentation.
-init:             ## Initialize the project based on an application template.
 ```
 
 ## Making a new release
