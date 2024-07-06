@@ -11,13 +11,13 @@ Awesome template_pipeline created by ajperry2
 Use these make sub arguments for these reasons
 
 
-|   Subargument	|   Effect	|
+|   Command	|   Effect	|
 |----------|------:|
-|   help	|   Show the help.	|
-|   install	|  Install the project in dev mode. 	|
-|   fmt	|   Format code using black & isort.	|
-|   lint	|   Run pep8, black, mypy linters.	|
-|   clean	|   Clean unused files.	|
-|   virtualenv	|   Create a virtual environment.	|
-|   release	|   Create a new tag for release.	|
-|   docs	|   Build the documentation.	|
+|   make help	|   Show the help.	|
+|   make install	|  Install the project in dev mode. 	|
+|   make fmt	|   Format code using black & isort.	|
+|   make lint	|   Run pep8, black, mypy linters.	|
+|   make clean	|   Clean unused files.	|
+|   make virtualenv	|   Create a virtual environment.	|
+|   make release	|   Create a new tag for release.	|
+|   make docs	|   Build the documentation.	|
